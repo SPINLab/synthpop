@@ -15,18 +15,32 @@ set.seed(47)
 
 computeGMMs <- function(df_data) {
 	# remember the original data types
-	df_types <- data.frame(matrix(ncol=4, nrow=0,
-								  dimnames=list(NULL, c("name", "type", "num_values", "num_distinct"))))
+	df_types <- data.frame(matrix(ncol=6, nrow=0,
+								  dimnames=list(NULL, c("name", "type", "num_values",
+														"num_distinct", "terms_min", "terms_max"))))
 	for (i in 1:length(colnames(df_data))) {
-		df_types[i,] <- c(colnames(df_data)[i], class(df_data[,i]), sum(!is.na(df_data[,i])), length(unique(df_data[,i])))
+		terms_min <- NA
+		terms_max <- NA
+		if (class(df_data[,i])=="factor") {
+			levels_trimmed <- sapply(levels(df_data[,i]), trimws)  # trim whitespace
+			num_terms <- lengths(regmatches(levels_trimmed, gregexpr("\\s", levels_trimmed)))
+
+			terms_min <- min(num_terms) + 1
+			terms_max <- max(num_terms) + 1
+		}
+
+		df_types[i,] <- c(colnames(df_data)[i], class(df_data[,i]), sum(!is.na(df_data[,i])),
+						  length(unique(df_data[,i])), terms_min, terms_max)
 	}
 	class(df_types$num_values) <- "numeric"
 	class(df_types$num_distinct) <- "numeric"
 	
 	# output table
 	num_added <- 0
-	df_out <- data.frame(matrix(ncol=9, nrow=0,
-		    				    dimnames=list(NULL, c("name", "type", "num_values", "num_distinct", "dist", "min", "max", "mu", "sigma"))))
+	df_out <- data.frame(matrix(ncol=11, nrow=0,
+		    				    dimnames=list(NULL, c("name", "type", "num_values", "num_distinct",
+													  "terms_min", "terms_max", "dist", "min", "max",
+													  "mu", "sigma"))))
 
 	list_out <- list()  # to store plots
 
@@ -35,8 +49,7 @@ computeGMMs <- function(df_data) {
 
 	for (c in colnames(df_data)) {
 		message(paste("- estimating distribution on column", c))
-		# TODO: filter PERSOONTAB*
-		if (identical(c, "PERSOONTAB")) {
+		if (identical(c, "RINPERSOON") || identical(c, "RINPERSOONS")) {
 			message("-- skipped identifiers")
 			next
 		}
@@ -194,7 +207,7 @@ approxNormal <- function(samples, samples_norm) {
 				data_min = min(samples)
 				data_max = max(samples)
 				for (k in 1:k_opt) {
-					df_out[k,] <- c("gmm", data_min, data_max, gmm$mu[k], gmm$sigma[k])
+					df_out[k,] <- c("norm", data_min, data_max, gmm$mu[k], gmm$sigma[k])
 				}
 
 				gmm.plot <- create_plot(gmm$x, gmm$mu, gmm$sigma, gmm$lambda)
