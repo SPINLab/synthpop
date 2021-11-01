@@ -37,7 +37,7 @@ sampleUnif <- function(param) {
 
 resample <- function(param, rdata) {
 	num_values <- unique(param$num_values)
-	num_distinct <- unique(param$num_distincts)
+	num_distinct <- unique(param$num_distinct)
 
 	# resample from a distinct subset
 	if (num_distinct < num_values) {
@@ -52,7 +52,7 @@ generate_factors <- function(param, cdata) {
 	terms_min <- unique(param$terms_min)
 	terms_max <- unique(param$terms_max)
 
-	if (terms_min == NA || terms_max == NA) {
+	if (is.na(terms_min) || is.na(terms_max)) {
 		return (cdata)
 	}
 
@@ -102,6 +102,8 @@ generate_sentence <- function(terms_min, terms_max) {
 }
 
 generate_dataset <- function(params) {
+	num_values <- max(params$num_values)
+
 	df <- data.frame()
 	for (lvl in levels(params$name)) {
 		message(paste(" generating column:", lvl))
@@ -131,9 +133,16 @@ generate_dataset <- function(params) {
 			cdata <- generate_factors(param, cdata)
 		}
 
+		# add NAs if needed
+		if (length(cdata) < num_values) {
+			filler <- rep(NA, num_values-length(cdata))
+			cdata <- sample(c(cdata, filler))  # merge and shuffle
+		}
+
 		if (length(df) <= 0) {
 			# initialize dataframe
-			df <- data.frame(lvl=cdata)
+			df <- data.frame(cdata)
+			colnames(df) <- lvl
 		} else {
 			df[lvl] <- cdata
 		}
