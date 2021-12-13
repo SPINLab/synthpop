@@ -292,5 +292,5 @@ estimate_parameters <- function(file) {
 
 # TODO: add for every file loop
 # read spreadsheet
-file <- "if/COVID-19_merged.csv"  # only for testing
+# file <- "if/COVID-19_merged.csv"  # only for testing
 

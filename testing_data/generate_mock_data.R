@@ -101,66 +101,86 @@ generate_sentence <- function(terms_min, terms_max) {
 	return (sentence)
 }
 
-generate_dataset <- function(params) {
-	num_values <- max(params$num_values)
-
+generate_column <- function(param, lvl, num_values) {
 	df <- data.frame()
-	for (lvl in levels(params$name)) {
-		message(paste(" generating column:", lvl))
-		param <- params[params$name==lvl,]
 
-		# sample from distributions
-		# ignore exceeding min/max values are we're dealing with estimates anyway
-		distribution <- unique(param$dist)
-		if (distribution=="norm") {
-			cdata <- sampleNorm(param)
-		} else {
-			cdata <- sampleUnif(param)
-		}
-		
-		# cast to integers if type is non numeric
-		dtype <- unique(param$type)
-		if (!(dtype=="numeric")) {
-			cdata <- sapply(cdata, round)  # use round to avoid hard cut
-			cdata <- as.integer(cdata)
-		}
+	# sample from distributions
+	# ignore exceeding min/max values are we're dealing with estimates anyway
+	distribution <- unique(param$dist)
+	if (distribution=="gmm") {
+		cdata <- sampleNorm(param)
+	} else {
+		cdata <- sampleUnif(param)
+	}
+	
+	# cast to integers if type is non numeric
+	dtype <- unique(param$type)
+	if (!(dtype=="numeric")) {
+		cdata <- sapply(cdata, round)  # use round to avoid hard cut
+		cdata <- as.integer(cdata)
+	}
 
-		# resample data to match the number of distinct values
-		cdata <- resample(param, cdata)
+	# resample data to match the number of distinct values
+	cdata <- resample(param, cdata)
 
-		# convert to factor data
-		if (dtype=="factor") {
-			cdata <- generate_factors(param, cdata)
-		}
+	# convert to factor data
+	if (dtype=="factor") {
+		cdata <- generate_factors(param, cdata)
+	}
 
-		# add NAs if needed
-		if (length(cdata) < num_values) {
-			filler <- rep(NA, num_values-length(cdata))
-			cdata <- sample(c(cdata, filler))  # merge and shuffle
-		}
+	# add NAs if needed
+	if (length(cdata) < num_values) {
+		filler <- rep(NA, num_values-length(cdata))
+		cdata <- sample(c(cdata, filler))  # merge and shuffle
+	}
 
-		if (length(df) <= 0) {
-			# initialize dataframe
-			df <- data.frame(cdata)
-			colnames(df) <- lvl
-		} else {
-			df[lvl] <- cdata
-		}
+	if (length(df) <= 0) {
+		# initialize dataframe
+		df <- data.frame(cdata)
+		colnames(df) <- lvl
+	} else {
+		df[lvl] <- cdata
 	}
 
 	return (df)
 }
 
-generate_dataset_from <- function(filename) {
+generate_dataset <- function(filename, columnwise=FALSE) {
 	output_dir <- dirname(filename)
+	message(paste("output directory set to", output_dir))
 
 	message(paste("reading file", filename))
 	params <- read.csv(filename, stringsAsFactors=TRUE)
-	df_out <- generate_dataset(params)
 
-	message(paste("writing output to", output_dir))
-	write.csv(df_out, paste0(output_dir, "/", "dataset.csv"), row.names = FALSE)
+	df <- data.frame()
+	num_values <- max(params$num_values)
+	for (lvl in levels(params$name)) {
+		message(paste(" generating column", lvl))
+		param <- params[params$name==lvl,]
+
+		df_out <- generate_column(param, lvl, num_values)
+
+		if (columnwise) {
+			name_out <- paste0(output_dir, "/", "dataset_", lvl, ".csv")
+			write.csv(df_out, name_out, row.names = FALSE)
+		} else {
+			if (length(df) <= 0) {
+				# initialize dataframe
+				df <- data.frame(df_out)
+				colnames(df) <- lvl
+			} else {
+				df[lvl] <- df_out
+			}
+		}
+	} 
+
+	if (!columnwise) {
+		name_out <- paste0(output_dir, "/", "dataset.csv")
+		write.csv(df, name_out, row.names = FALSE)
+	} else {
+		message("produce a single file with `$ paste -d ',' dataset_*.csv > dataset.csv`")
+	}
 }
 
-csv_file <- "COVID-19_merged.csv_out/distributions.csv"
+#csv_file <- "COVID-19_merged.csv_out/distributions.csv"
 
