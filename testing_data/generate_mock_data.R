@@ -1,5 +1,11 @@
 library('stringi')
 
+# Author: Xander Wilcke
+# Email: w.x.wilcke@vu.nl
+#
+# R script to regenerate dataset from distribution parameters. 
+# Lorem Ipsum is used for natural language and other text values.
+
 sampleNorm <- function(param) {
 	rdata <- c()  # empty vector
 
