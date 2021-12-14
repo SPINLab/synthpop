@@ -3,7 +3,7 @@ library('FNN')
 library("ggplot2")
 library('mixtools')
 
-set.seed(47)
+set.seed(8813)
 
 # Author: Xander Wilcke
 # Email: w.x.wilcke@vu.nl
@@ -13,16 +13,16 @@ set.seed(47)
 # we use Monte Carlo sampling, the adding of noise, and the default assumption
 # that the distribution can be represented as a Gaussian mixture model.
 
-computeGMMs <- function(df_data) {
+computeGMMs <- function(df_data, num_samples=10e4) {
 	# remember the original data types
 	df_types <- data.frame(matrix(ncol=6, nrow=0,
-								  dimnames=list(NULL, c("name", "type", "num_values",
-														"num_distinct", "terms_min", "terms_max"))))
+				      dimnames=list(NULL, c("name", "type", "num_values", "num_distinct",
+							    "terms_min", "terms_max"))))
 	for (i in 1:length(colnames(df_data))) {
 		terms_min <- NA
 		terms_max <- NA
 		if (class(df_data[,i])=="factor") {
-			levels_trimmed <- sapply(levels(df_data[,i]), trimws)  # trim whitespace
+			levels_trimmed <- sapply(levels(df_data[,i]), trimws)
 			num_terms <- lengths(regmatches(levels_trimmed, gregexpr("\\s", levels_trimmed)))
 
 			terms_min <- min(num_terms) + 1
@@ -30,7 +30,7 @@ computeGMMs <- function(df_data) {
 		}
 
 		df_types[i,] <- c(colnames(df_data)[i], class(df_data[,i]), sum(!is.na(df_data[,i])),
-						  length(unique(df_data[,i])), terms_min, terms_max)
+				  length(unique(df_data[,i])), terms_min, terms_max)
 	}
 	class(df_types$num_values) <- "numeric"
 	class(df_types$num_distinct) <- "numeric"
@@ -38,9 +38,8 @@ computeGMMs <- function(df_data) {
 	# output table
 	num_added <- 0
 	df_out <- data.frame(matrix(ncol=11, nrow=0,
-		    				    dimnames=list(NULL, c("name", "type", "num_values", "num_distinct",
-													  "terms_min", "terms_max", "dist", "min", "max",
-													  "mu", "sigma"))))
+		    		    dimnames=list(NULL, c("name", "type", "num_values", "num_distinct",
+ 						     "terms_min", "terms_max", "dist", "min", "max", "mu", "sigma"))))
 
 	list_out <- list()  # to store plots
 
@@ -49,7 +48,7 @@ computeGMMs <- function(df_data) {
 
 	for (c in colnames(df_data)) {
 		message(paste("- estimating distribution on column", c))
-		if (identical(c, "RINPERSOON") || identical(c, "RINPERSOONS")) {
+		if (grepl("rinpersoon", tolower(c))) {
 			message("-- skipped identifiers")
 			next
 		}
@@ -64,7 +63,6 @@ computeGMMs <- function(df_data) {
 		}
 
 		tryCatch({
-			num_samples <- 10e4
 			samples <- sample(df_data[[c]][!is.na(df_data[[c]])], size=num_samples, replace=TRUE)
 
 			# add a bit of Gaussian noise to obscure actual data
@@ -99,6 +97,9 @@ computeGMMs <- function(df_data) {
 
 		}, error = function(e) { message(paste("--- failed with error:", (e$message))) }
 		)
+
+		rm(samples)
+		gc()
 	}
 
 	return (list(df_out, list_out))
@@ -112,7 +113,7 @@ addNoise <- function(samples, multiplier=0.05) {
 
 approxUniform <- function(samples) {
 	df_out <- data.frame(matrix(ncol=5, nrow=0,
-							  dimnames=list(NULL, c("dist", "min", "max", "mu", "sigma"))))
+				dimnames=list(NULL, c("dist", "min", "max", "mu", "sigma"))))
 
 	df_out[1,] <- c("unif", min(samples), max(samples), NA, NA)
 
@@ -131,9 +132,9 @@ isMixture <- function(samples, tolerance=0.01) {
 		sigma <- sd(samples)
 
 		div_expected <- mean(KL.divergence(rnorm(n, mean=mu, sd=sigma),
-										   rnorm(n, mean=mu, sd=sigma)))
+						   rnorm(n, mean=mu, sd=sigma)))
 		div_actual <- mean(KL.divergence(samples,
-										 rnorm(n, mean=mu, sd=sigma)))
+						 rnorm(n, mean=mu, sd=sigma)))
 
 		if (isTRUE(all.equal.numeric(div_expected, div_actual, tolerance=tolerance))) {
 			return (FALSE)
@@ -146,7 +147,7 @@ isMixture <- function(samples, tolerance=0.01) {
 	return (FALSE)  # safe fallback
 }
 
-estimateNumClusters <- function(samples, num_clusters.max=8, sq_penalty_weight=1e-4) {
+estimateNumClusters <- function(samples, num_clusters.max=6, sq_penalty_weight=1e-4) {
 	n <- length(samples)
 	m <- floor(n/2)
 
@@ -172,12 +173,19 @@ estimateNumClusters <- function(samples, num_clusters.max=8, sq_penalty_weight=1
 
 			# compute KL divergence between distributions 
 			KLdiv[k-1, 2] <- abs(mean(KL.divergence(samples_a, samples_b)))
+			
+			rm(gmm_a)
+			rm(gmm_b)
+			rm(samples_a)
+			rm(samples_b)
+			gc()
+
 		}, error = function(e) { message(paste("--- failed with error:", (e$message))) }
 		)
 	}
 
 	# add penalty to higher k
-	KLdiv$divergence <- KLdiv$divergence + (KLdiv$k ** 2) * sq_penalty_weight
+	KLdiv$divergence <- KLdiv$divergence + KLdiv$k * sq_penalty_weight
 
 	# which k yielded the lowest value of KL divergence
 	k_opt <- KLdiv[which.min(KLdiv$divergence),]$k
@@ -191,7 +199,7 @@ estimateNumClusters <- function(samples, num_clusters.max=8, sq_penalty_weight=1
 
 approxNormal <- function(samples, samples_norm) {
 	df_out <- data.frame(matrix(ncol=5, nrow=0,
-							  dimnames=list(NULL, c("dist", "min", "max", "mu", "sigma"))))
+				  dimnames=list(NULL, c("dist", "min", "max", "mu", "sigma"))))
 
 	# assume Gaussian mixture model
 	if (isMixture(samples)) {
@@ -207,10 +215,13 @@ approxNormal <- function(samples, samples_norm) {
 				data_min = min(samples)
 				data_max = max(samples)
 				for (k in 1:k_opt) {
-					df_out[k,] <- c("norm", data_min, data_max, gmm$mu[k], gmm$sigma[k])
+					df_out[k,] <- c("gmm", data_min, data_max, gmm$mu[k], gmm$sigma[k])
 				}
 
 				gmm.plot <- create_plot(gmm$x, gmm$mu, gmm$sigma, gmm$lambda)
+
+				rm(gmm)
+				gc()
 
 				return (list(df_out, gmm.plot))
 			}
@@ -231,7 +242,7 @@ approxNormal <- function(samples, samples_norm) {
 
 create_hist <- function(samples) {
 	breaks <- pretty(range(samples), n = nclass.FD(samples), min.n = 1)
-	bwidth <- breaks[2]-breaks[1]
+	bwidth <- breaks[2] - breaks[1]
 
 	df <- data.frame(x = samples)
 	plt <- ggplot(data=df) +
@@ -244,7 +255,7 @@ create_hist <- function(samples) {
 
 create_plot <- function(samples, mu, sigma, lambda=1) {
 	breaks <- pretty(range(samples), n = nclass.FD(samples), min.n = 1)
-	bwidth <- breaks[2]-breaks[1]
+	bwidth <- breaks[2] - breaks[1]
 
 	df <- data.frame(x = samples)
 	plt <- ggplot(data=df) +
@@ -265,21 +276,16 @@ plot_mix_comps <- function(x, mu, sigma, lam) {
 	  lam * dnorm(x, mu, sigma)
 }
 
-estimate_parameters <- function(file) {
-	filename <- basename(file)
-	output_dir <- paste0(filename, "_out")
-
+estimate_params <- function(df, output_dir="output", num_samples=10e4) {
 	dir.create(file.path(getwd(), output_dir))
 
-	message(paste("reading file", file))
-	# TODO: add other file types
-	df <- read.csv(file, stringsAsFactors=TRUE)
-
-	out <- computeGMMs(df)
+	#plog <- file(paste0(output_dir, "/log.txt"), open="a")
+	#sink(plog, type="message")
+	
+	out <- computeGMMs(df, num_samples)
 
 	df_out <- out[[1]]
 	plots <- out[[2]]
-
 
 	message(paste("writing output to", output_dir))
 	write.csv(df_out, paste0(output_dir, "/", "distributions.csv"), row.names = FALSE)
@@ -289,8 +295,4 @@ estimate_parameters <- function(file) {
 			   plot = plots[[c]])
 	}
 }
-
-# TODO: add for every file loop
-# read spreadsheet
-# file <- "if/COVID-19_merged.csv"  # only for testing
 

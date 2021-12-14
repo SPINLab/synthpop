@@ -16,19 +16,19 @@ The scripts published here can be used to generate mock data that have a distrib
 
 ## HowTo
 
-1) Start R (or RStudio) and source the parameters estimation script:
+1) Read the original data into R (of RStudio) via `read.csv()` or similar:
+
+`> data <- read.csv("path/to/file.csv")`
+
+2) Source the parameters estimation script and call the `estimate_parameter()` function with, optionally, the destination directory (default `output/`) and the number of samples to estimate from (default `10e4`):
 
 `> source("estimate_parameters.R")`
+`> estimate_parameters(data[, <output dir>][, <number of samples>])`
 
-2) Call the parameter estimation function with a file descriptor:
+This can take some time to finish, depending on the number of samples and the size of the data. On completion, the output directory contains the file `distributions.csv`, in which each row holds the parameters of a single distribution. How well these distributions fit the data can be seen in the accompanied plots.
 
-`> estimate_parameters("/path/to/file")`
-
-3) Once the above function has completed (this can take a few hours), source the data generation script:
+3) Generate mock data by sourcing the relevant script and by calling the `generate_dataset()` function. Set `columnwise=TRUE` if keeping the whole dataset in memory is unfeasible:
 
 `> source("generate_mock_data.R")`
-
-4) Call the data generation function with a file descriptor to the just-estimated parameters:
-
-`> generate_dataset("/path/to/parameters.csv")`
+`> generate_dataset("/path/to/distributions.csv"[, columnwise=TRUE/FALSE])`
 
