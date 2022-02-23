@@ -14,29 +14,76 @@ sampleNorm <- function(param) {
 	mu_idx <- which(cnames=="mu")
 	sigma_idx <- which(cnames=="sigma")
 
-	num_values <- unique(param$num_values)/nrow(param)  # per distribution
+	num_distinct <- rep(floor(unique(param$num_distinct)/nrow(param)),nrow(param))  # per distribution
+	mod_distict <- unique(param$num_distinct)%%nrow(param)
+	i <- 1
+	while (mod_distict > 0) {
+		num_distinct[i] <- num_distinct[i] + 1
+		mod_distict <- mod_distict - 1
+	}
+
+	num_values <- rep(floor(unique(param$num_values)/nrow(param)),nrow(param))  # per distribution
+	mod_values <- unique(param$num_values)%%nrow(param)
+	i <- 1
+	while (mod_values > 0) {
+		num_values[i] <- num_values[i] + 1
+		mod_values <- mod_values - 1
+	}
+
 	for (i in 1:nrow(param)) {
-		rdata <- c(rdata, rnorm(n=floor(num_values),
-							    mean=param[i,mu_idx],
-							    sd=param[i,sigma_idx]))
+		cdata <- rnorm(n=num_values[i],
+		               mean=param[i,mu_idx],
+			           sd=param[i,sigma_idx])
+
+		if (num_distinct[i] == 1){
+			cdata_sample <- sample(cdata, size=1)
+			rdata <- c(rdata, rep(cdata_sample, num_values[i]))
+		} else if (num_distinct[i] < num_values[i]) {
+			cdata_sample <- sort(sample(cdata, size=num_distinct[i], replace=FALSE))
+
+			psample <- c()
+			for (j in 1:num_distinct[i]) {
+				if (j == 1) {
+					psample <- c(psample, pnorm(cdata_sample[j], param[i,mu_idx], param[i,sigma_idx]))
+				} else {
+					pb <- pnorm(cdata_sample[j-1], param[i,mu_idx], param[i,sigma_idx])
+					pe <- pnorm(cdata_sample[j], param[i,mu_idx], param[i,sigma_idx])
+					psample <- c(psample, (pe-pb))
+				}				
+			}
+
+			psample <- psample * 1/sum(psample)  # scale with sum 1
+			rdata <- c(rdata, sample(cdata_sample, size=num_values, replace=TRUE, prob=psample))
+		}
 	}
 
-	# compensate for rounding errors on num_values
-	if (length(rdata) < unique(param$num_values)) {
-		j = sample.int(nrow(param), size=1)
-		rdata <- c(rdata, rnorm(n=1,
-								mean=param[j,mu_idx],
-								sd=param[j,sigma_idx]))
-	}
-
-	# shuffle data to avoid ordered distributions from loop
 	rdata <- sample(rdata)
 
 	return (rdata)
 }
 
 sampleUnif <- function(param) {
-	rdata <- runif(param$num_values, min=param$min, max=param$max)
+	num_values <- unique(param$num_values)
+	num_distinct <- unique(param$num_distinct)
+
+	if (num_distinct < num_values) {
+		rdata_diff <- param$max - param$min
+		rdata_incr <- rdata_diff / (num_distinct - 1)
+		rdata_values <- c(param$min)
+
+		v <- param$min
+		for (i in 1:(num_distinct - 1)) {
+			v_new <- v + rdata_incr
+			rdata_values <- c(rdata_values, v_new)
+
+			v <- v_new
+		}
+
+		p <- rep(1.0 / num_distinct, num_distinct)  # add some difference in counts
+		rdata <- sample(rdata_values, size=num_values, replace=TRUE, prob=p)
+	} else {
+		rdata <- runif(param$num_values, min=param$min, max=param$max)
+	}
 
 	return (rdata)
 }
@@ -122,12 +169,12 @@ generate_column <- function(param, lvl, num_values) {
 	# cast to integers if type is non numeric
 	dtype <- unique(param$type)
 	if (!(dtype=="numeric")) {
-		cdata <- sapply(cdata, round)  # use round to avoid hard cut
+		distinct <- unique(cdata)
+		for (i in 1:length(distinct)) {
+			cdata[cdata==distinct[i]] <- i
+		}
 		cdata <- as.integer(cdata)
 	}
-
-	# resample data to match the number of distinct values
-	cdata <- resample(param, cdata)
 
 	# convert to factor data
 	if (dtype=="factor") {
