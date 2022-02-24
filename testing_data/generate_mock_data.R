@@ -20,17 +20,27 @@ sampleNorm <- function(param) {
 	while (mod_distict > 0) {
 		num_distinct[i] <- num_distinct[i] + 1
 		mod_distict <- mod_distict - 1
+
+		i <- i+1
 	}
 
-	num_values <- rep(floor(unique(param$num_values)/nrow(param)),nrow(param))  # per distribution
-	mod_values <- unique(param$num_values)%%nrow(param)
+	# ugly fix to remedy impossible situation in which num_distinct < nrow(param)
+	# this should be fixed in parameter estimation script
+	num_distinct <- num_distinct[num_distinct > 0]
+
+	len_distinct <- length(num_distinct)
+
+	num_values <- rep(floor(unique(param$num_values)/len_distinct),len_distinct)  # per distribution
+	mod_values <- unique(param$num_values)%%len_distinct
 	i <- 1
 	while (mod_values > 0) {
 		num_values[i] <- num_values[i] + 1
 		mod_values <- mod_values - 1
+		
+		i <- i+1
 	}
 
-	for (i in 1:nrow(param)) {
+	for (i in 1:len_distinct) {
 		cdata <- rnorm(n=num_values[i],
 		               mean=param[i,mu_idx],
 			           sd=param[i,sigma_idx])
@@ -53,7 +63,9 @@ sampleNorm <- function(param) {
 			}
 
 			psample <- psample * 1/sum(psample)  # scale with sum 1
-			rdata <- c(rdata, sample(cdata_sample, size=num_values, replace=TRUE, prob=psample))
+			rdata <- c(rdata, sample(cdata_sample, size=num_values[i], replace=TRUE, prob=psample))
+		} else {
+			rdata <- c(rdata, cdata)
 		}
 	}
 
@@ -66,7 +78,9 @@ sampleUnif <- function(param) {
 	num_values <- unique(param$num_values)
 	num_distinct <- unique(param$num_distinct)
 
-	if (num_distinct < num_values) {
+	if (num_distinct == 1) {
+		rdata <- rep(runif(1, min=param$min, max=param$max), num_values)
+	} else if (num_distinct < num_values) {
 		rdata_diff <- param$max - param$min
 		rdata_incr <- rdata_diff / (num_distinct - 1)
 		rdata_values <- c(param$min)
@@ -83,19 +97,6 @@ sampleUnif <- function(param) {
 		rdata <- sample(rdata_values, size=num_values, replace=TRUE, prob=p)
 	} else {
 		rdata <- runif(param$num_values, min=param$min, max=param$max)
-	}
-
-	return (rdata)
-}
-
-resample <- function(param, rdata) {
-	num_values <- unique(param$num_values)
-	num_distinct <- unique(param$num_distinct)
-
-	# resample from a distinct subset
-	if (num_distinct < num_values) {
-		rdata_sample = sample(rdata, size=num_distinct, replace=FALSE)
-		rdata <- sample(rdata_sample, size=num_values, replace=TRUE)
 	}
 
 	return (rdata)
